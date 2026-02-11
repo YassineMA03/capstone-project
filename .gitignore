@@ -1,0 +1,15 @@
+# Virtual environment
+venv/
+
+# Environment variables (API keys)
+.env
+
+# Analysis results
+license_analysis_results/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

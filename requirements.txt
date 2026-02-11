@@ -1,0 +1,9 @@
+# Capstone License Analyzer - Requirements
+
+# Core dependencies
+mistralai>=1.0.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+# ScanCode
+scancode-toolkit-mini>=32.0.0
