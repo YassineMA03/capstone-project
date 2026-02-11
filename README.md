@@ -150,9 +150,12 @@ The JSON file contains the full structured data: all license mentions with file 
 ## Project Structure
 
 ```
-capstone-analyzer/
-├── capstone_lite.py              # Main script — pipeline orchestrator
-├── extract_license_context.py    # ScanCode output → structured context
+capstone-project/
+├── capstone-analizer/
+│     ├── capstone_lite.py
+│     └── orchestrator/
+│        ├── __init__.py
+│        └── extract_license_context.py
 ├── requirements.txt              # Python dependencies
 ├── setup.sh                      # Automated setup script
 ├── .env                          # API keys (not committed)
