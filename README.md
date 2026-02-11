@@ -16,7 +16,7 @@ A lightweight tool that automatically detects and classifies open-source license
 ```bash
 # 1. Clone the project
 git clone <your-repo-url>
-cd capstone-analyzer
+cd capstone-project
 
 # 2. Run the setup script (creates venv + installs deps)
 bash setup.sh
@@ -28,7 +28,6 @@ source venv/bin/activate
 nano .env
 
 # 5. Analyze a repository
-cd capstone-analizer
 python capstone_lite.py --link https://github.com/twbs/bootstrap
 ```
 
@@ -52,7 +51,7 @@ Create a `.env` file in the project root. The setup script generates one automat
 Example `.env`:
 
 ```
-MISTRAL_API_KEY=xxxxxxxxxxxxxxxxxxxxxx
+MISTRAL_API_KEY=xxxxxxxxxxxxxxxxx
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -151,11 +150,8 @@ The JSON file contains the full structured data: all license mentions with file 
 
 ```
 capstone-project/
-├── capstone-analizer/
-│     ├── capstone_lite.py
-│     └── orchestrator/
-│        ├── __init__.py
-│        └── extract_license_context.py
+├── capstone_lite.py              # Main script — pipeline orchestrator
+├── extract_license_context.py    # ScanCode output → structured context
 ├── requirements.txt              # Python dependencies
 ├── setup.sh                      # Automated setup script
 ├── .env                          # API keys (not committed)
@@ -194,6 +190,7 @@ pip install -r requirements.txt
 
 **"Skipping LLM analysis"** — The `MISTRAL_API_KEY` is missing from `.env`. ScanCode results are still saved, but without the final classification.
 
+**ScanCode `Invalid inputs: all input paths must be relative`** — Make sure you're using the latest version of `capstone_lite.py` which scans the directory instead of passing individual file paths.
 
 ## License
 

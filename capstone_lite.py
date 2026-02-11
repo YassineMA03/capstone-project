@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Import the extraction logic
-from orchestrator.extract_license_context import extract_license_context_json
+from extract_license_context import extract_license_context_json
 
 # Import LLM API functions
 from mistralai import Mistral
@@ -532,7 +532,7 @@ def analyze_repository(
         print(f"\n📝 Extracting license context...")
         license_mentions = extract_license_context_json(
             str(scancode_output),
-            str(repo_dir),
+            str(temp_dir),
             score_threshold=99.0
         )
         print(f"✓ Extracted {len(license_mentions)} license mentions")
