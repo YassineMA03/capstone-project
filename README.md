@@ -191,7 +191,6 @@ pip install -r requirements.txt
 
 **"Skipping LLM analysis"** — The `MISTRAL_API_KEY` is missing from `.env`. ScanCode results are still saved, but without the final classification.
 
-**ScanCode `Invalid inputs: all input paths must be relative`** — Make sure you're using the latest version of `capstone_lite.py` which scans the directory instead of passing individual file paths.
 
 ## License
 
