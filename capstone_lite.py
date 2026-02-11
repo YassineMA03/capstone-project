@@ -269,7 +269,7 @@ def get_repo_tree(owner: str, repo: str, token: Optional[str] = None) -> List[Di
 
 
 def search_license_files_via_api(owner: str, repo: str, headers: dict) -> List[Dict]:
-    """Fallback for huge repos: search GitHub for license, readme, copyright, copying, patent files only."""
+    """Fallback for huge repos: search GitHub for license, readme, copyright files only."""
     search_terms = ["license", "licence", "readme", "copyright", "copying", "patent"]
 
     found = {}  # path -> item, deduplicated
@@ -297,17 +297,15 @@ def search_license_files_via_api(owner: str, repo: str, headers: dict) -> List[D
 
 
 def is_license_related_file(path: str) -> bool:
-    """Return True only for LICENSE, README, COPYRIGHT, COPYING, and PATENT files."""
+    """Return True only for LICENSE, README, and COPYRIGHT files."""
     name = Path(path).name.lower()
 
-    # Only match files whose name starts with one of these keywords
+    # Only match files whose name starts with one of these three keywords
     return (
         name.startswith("license")
         or name.startswith("licence")
         or name.startswith("readme")
         or name.startswith("copyright")
-        or name.startswith("copying")
-        or name.startswith("patent")
     )
 
 
