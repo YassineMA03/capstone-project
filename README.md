@@ -28,6 +28,7 @@ source venv/bin/activate
 nano .env
 
 # 5. Analyze a repository
+cd capstone-analizer
 python capstone_lite.py --link https://github.com/twbs/bootstrap
 ```
 
@@ -51,7 +52,7 @@ Create a `.env` file in the project root. The setup script generates one automat
 Example `.env`:
 
 ```
-MISTRAL_API_KEY=sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ
+MISTRAL_API_KEY=xxxxxxxxxxxxxxxxxxxxxx
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
