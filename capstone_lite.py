@@ -147,6 +147,7 @@ Rules:
 - Use ONLY SPDX identifiers.
 - Choose ONLY among these candidate SPDX IDs: {sorted(candidates)}
 - Construct a valid SPDX license expression for the MAIN code license(s).
+- excluded_licenses MUST be a flat JSON array of strings (e.g. ["MIT", "Apache-2.0"]). Do NOT use a nested object.
 - If uncertain/contradictory, set needs_human_review=true and confidence<=0.6.
 - Output ONLY valid JSON. No markdown. No extra text.
 
@@ -333,10 +334,12 @@ def download_license_files(owner: str, repo: str, dest_dir: Path, token: Optiona
     # Get repository tree
     tree = get_repo_tree(owner, repo, token)
     
-    # Filter license-related files
+    # Filter license-related files — root level only
     license_files = [
         item for item in tree 
-        if item['type'] == 'blob' and is_license_related_file(item['path'])
+        if item['type'] == 'blob'
+        and is_license_related_file(item['path'])
+        and '/' not in item['path']  # root-level files only
     ]
     
     print(f"\n📄 Found {len(license_files)} license-related files:")
@@ -592,17 +595,96 @@ def analyze_repository(
             print(f"📁 Temporary files kept at: {temp_dir}")
 
 
+def analyze_local_folder(
+    folder_path: str,
+    output_dir: Path,
+    api_key: str = None,
+):
+    """Analyze licenses in a local folder."""
+    
+    total_start = time.time()
+    
+    folder = Path(folder_path).resolve()
+    if not folder.is_dir():
+        print(f"❌ Not a valid directory: {folder}")
+        sys.exit(1)
+    
+    project_name = folder.name
+    print(f"🔍 Analyzing local folder: {folder}")
+    
+    # --- ScanCode ---
+    sc_start = time.time()
+    scancode_output = folder / "scancode_results.json"
+    run_scancode(folder, scancode_output)
+    sc_elapsed = time.time() - sc_start
+    print(f"⏱  ScanCode: {sc_elapsed:.1f}s")
+    
+    # Extract license context
+    print(f"\n📝 Extracting license context...")
+    license_mentions = extract_license_context_json(
+        str(scancode_output),
+        str(folder.parent),
+        score_threshold=99.0
+    )
+    print(f"✓ Extracted {len(license_mentions)} license mentions")
+    
+    # Clean up scancode output from the folder
+    scancode_output.unlink(missing_ok=True)
+    
+    # LLM analysis
+    results = {
+        "repository": str(folder),
+        "analyzed_at": datetime.now().isoformat(),
+        "license_mentions": license_mentions
+    }
+    
+    llm_elapsed = 0.0
+    if api_key and license_mentions:
+        print(f"\n🤖 Analyzing licenses with Mistral AI...")
+        llm_start = time.time()
+        try:
+            llm_decision = label_repo_with_mistral(
+                project_name,
+                license_mentions,
+                api_key
+            )
+            results["llm_decision"] = llm_decision
+            print(f"✓ LLM analysis complete")
+        except Exception as e:
+            print(f"⚠️  LLM analysis failed: {e}")
+            results["llm_error"] = str(e)
+        llm_elapsed = time.time() - llm_start
+        print(f"⏱  LLM: {llm_elapsed:.1f}s")
+    elif not api_key:
+        print("\n⚠️  Skipping LLM analysis (no API key in .env)")
+    else:
+        print("\n⚠️  No license mentions found for LLM analysis")
+    
+    total_elapsed = time.time() - total_start
+    
+    results["timing"] = {
+        "scancode_seconds": round(sc_elapsed, 1),
+        "llm_seconds": round(llm_elapsed, 1),
+        "total_seconds": round(total_elapsed, 1),
+    }
+    
+    save_results(results, output_dir, project_name)
+    
+    print(f"\n⏱  Total: {total_elapsed:.1f}s  (scancode {sc_elapsed:.1f}s | llm {llm_elapsed:.1f}s)")
+
+
 # -----------------------------
 # CLI
 # -----------------------------
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Capstone License Analyzer - Lightweight version (downloads only license files)",
+        description="Capstone License Analyzer - Analyze licenses from GitHub repos or local folders",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s --link https://github.com/twbs/bootstrap
+  %(prog)s --folder /path/to/my/project
   %(prog)s --link https://github.com/facebook/react --output ./results
   
 Configuration:
@@ -612,10 +694,15 @@ Configuration:
         """
     )
     
-    parser.add_argument(
+    # Mutually exclusive: --link or --folder
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--link",
-        required=True,
         help="GitHub repository URL to analyze"
+    )
+    source.add_argument(
+        "--folder",
+        help="Path to a local folder to scan"
     )
     
     parser.add_argument(
@@ -627,7 +714,7 @@ Configuration:
     parser.add_argument(
         "--keep-temp",
         action="store_true",
-        help="Keep temporary downloaded files (for debugging)"
+        help="Keep temporary downloaded files (for debugging, only with --link)"
     )
     
     args = parser.parse_args()
@@ -640,13 +727,19 @@ Configuration:
         print("   Create a .env file with: MISTRAL_API_KEY=your_key_here")
         print("   Continuing without LLM analysis...\n")
     
-    # Run analysis
-    analyze_repository(
-        repo_url=args.link,
-        output_dir=Path(args.output),
-        api_key=api_key,
-        keep_temp=args.keep_temp
-    )
+    if args.link:
+        analyze_repository(
+            repo_url=args.link,
+            output_dir=Path(args.output),
+            api_key=api_key,
+            keep_temp=args.keep_temp
+        )
+    else:
+        analyze_local_folder(
+            folder_path=args.folder,
+            output_dir=Path(args.output),
+            api_key=api_key,
+        )
 
 
 if __name__ == "__main__":
