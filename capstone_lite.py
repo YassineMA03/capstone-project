@@ -159,6 +159,109 @@ Evidence:
 """.strip()
 
 
+def normalize_spdx_id(license_key: str) -> str:
+    """Convert lowercase license keys to proper SPDX identifiers."""
+    if not license_key:
+        return "NOASSERTION"
+    
+    mappings = {
+        # GPL family
+        "gpl-1.0": "GPL-1.0-only",
+        "gpl-1.0-plus": "GPL-1.0-or-later",
+        "gpl-2.0": "GPL-2.0-only",
+        "gpl-2.0-plus": "GPL-2.0-or-later",
+        "gpl-3.0": "GPL-3.0-only",
+        "gpl-3.0-plus": "GPL-3.0-or-later",
+        # LGPL family
+        "lgpl-2.0": "LGPL-2.0-only",
+        "lgpl-2.0-plus": "LGPL-2.0-or-later",
+        "lgpl-2.1": "LGPL-2.1-only",
+        "lgpl-2.1-plus": "LGPL-2.1-or-later",
+        "lgpl-3.0": "LGPL-3.0-only",
+        "lgpl-3.0-plus": "LGPL-3.0-or-later",
+        # AGPL
+        "agpl-3.0": "AGPL-3.0-only",
+        "agpl-3.0-plus": "AGPL-3.0-or-later",
+        # Apache
+        "apache-2.0": "Apache-2.0",
+        "apache-1.0": "Apache-1.0",
+        "apache-1.1": "Apache-1.1",
+        # MIT
+        "mit": "MIT",
+        "mit-0": "MIT-0",
+        # BSD family
+        "bsd-2-clause": "BSD-2-Clause",
+        "bsd-3-clause": "BSD-3-Clause",
+        "bsd-new": "BSD-3-Clause",
+        "bsd-simplified": "BSD-2-Clause",
+        "bsd-4-clause": "BSD-4-Clause",
+        "0bsd": "0BSD",
+        # Other common
+        "isc": "ISC",
+        "mpl-2.0": "MPL-2.0",
+        "mpl-1.0": "MPL-1.0",
+        "mpl-1.1": "MPL-1.1",
+        "cc0-1.0": "CC0-1.0",
+        "unlicense": "Unlicense",
+        "wtfpl": "WTFPL",
+        "zlib": "Zlib",
+        "boost-1.0": "BSL-1.0",
+        "bsl-1.0": "BSL-1.0",
+        "curl": "curl",
+        "x11": "X11",
+        "artistic-2.0": "Artistic-2.0",
+        "epl-1.0": "EPL-1.0",
+        "epl-2.0": "EPL-2.0",
+        "cddl-1.0": "CDDL-1.0",
+        "universal-foss-exception-1.0": "Universal-FOSS-exception-1.0",
+        "public-domain": "LicenseRef-Public-Domain",
+        "other-permissive": "LicenseRef-Permissive",
+    }
+    
+    key_lower = license_key.lower().strip()
+    if key_lower in mappings:
+        return mappings[key_lower]
+    
+    # Already proper case
+    if any(c.isupper() for c in license_key):
+        return license_key
+    
+    # Uppercase unknown identifiers
+    parts = license_key.split("-")
+    formatted = []
+    for part in parts:
+        if part.replace(".", "").isdigit() or part in ["or", "and", "with", "plus"]:
+            formatted.append(part)
+        else:
+            formatted.append(part.upper())
+    return "-".join(formatted)
+
+
+def normalize_spdx_expression(expr: str) -> str:
+    """Normalize an entire SPDX expression (handles AND, OR, WITH operators)."""
+    if not expr:
+        return "NOASSERTION"
+    
+    # Split by operators while keeping them
+    tokens = re.split(r'(\s+AND\s+|\s+OR\s+|\s+WITH\s+|\(|\))', expr, flags=re.IGNORECASE)
+    
+    result = []
+    for token in tokens:
+        token_stripped = token.strip()
+        if not token_stripped:
+            continue
+        # Keep operators as uppercase
+        if token_stripped.upper() in ["AND", "OR", "WITH"]:
+            result.append(token_stripped.upper())
+        elif token_stripped in ["(", ")"]:
+            result.append(token_stripped)
+        else:
+            # Normalize the license identifier
+            result.append(normalize_spdx_id(token_stripped))
+    
+    return " ".join(result)
+
+
 def label_repo_with_mistral(
     repo: str,
     mentions: List[Dict[str, Any]],
@@ -190,7 +293,13 @@ def label_repo_with_mistral(
     except ValidationError as e:
         raise ValueError(f"Schema validation failed:\n{e}\n\nParsed JSON:\n{data}\n\nRaw output:\n{content}")
 
-    return decision.model_dump()
+    # Normalize all SPDX identifiers to proper case
+    result = decision.model_dump()
+    result["spdx_expression"] = normalize_spdx_expression(result["spdx_expression"])
+    result["main_licenses"] = [normalize_spdx_id(lic) for lic in result["main_licenses"]]
+    result["excluded_licenses"] = [normalize_spdx_id(lic) for lic in result["excluded_licenses"]]
+    
+    return result
 
 
 # -----------------------------
@@ -390,6 +499,7 @@ def run_scancode(repo_path: Path, output_file: Path, specific_files: List[Path] 
         cmd = [
             "scancode",
             "--license",
+            "--license-text",  # Include matched text for context
             "--json-pp", str(output_file),
             str(repo_path)
         ]
@@ -486,7 +596,8 @@ def analyze_repository(
     repo_url: str,
     output_dir: Path,
     api_key: str = None,
-    keep_temp: bool = False
+    keep_temp: bool = False,
+    debug: bool = False
 ):
     """Main pipeline to analyze a repository's licenses (lightweight mode)."""
     
@@ -531,14 +642,40 @@ def analyze_repository(
         sc_elapsed = time.time() - sc_start
         print(f"⏱  ScanCode: {sc_elapsed:.1f}s")
         
+        # Debug: dump scancode output structure
+        if debug:
+            print(f"\n🔬 [DEBUG] ScanCode output structure:")
+            with open(scancode_output) as f:
+                sc_data = json.load(f)
+            print(f"   Top-level keys: {list(sc_data.keys())}")
+            print(f"   files count: {len(sc_data.get('files', []))}")
+            print(f"   license_detections count: {len(sc_data.get('license_detections', []))}")
+            for fe in sc_data.get('files', []):
+                if fe.get('type') != 'directory':
+                    print(f"\n   File: {fe.get('path')}")
+                    print(f"     detected_license_expression: {fe.get('detected_license_expression')}")
+                    print(f"     detected_license_expression_spdx: {fe.get('detected_license_expression_spdx')}")
+                    for det in fe.get('license_detections', []):
+                        print(f"     Detection: {det.get('license_expression')}")
+                        for m in det.get('matches', [])[:3]:  # First 3 matches
+                            print(f"       Match: score={m.get('score')}, expr={m.get('license_expression')}")
+        
         # Extract license context
         print(f"\n📝 Extracting license context...")
         license_mentions = extract_license_context_json(
             str(scancode_output),
             str(temp_dir),
-            score_threshold=99.0
+            score_threshold=50.0,  # Lower threshold to catch more matches
+            debug=debug
         )
         print(f"✓ Extracted {len(license_mentions)} license mentions")
+        
+        # Debug: show what we extracted
+        if debug and license_mentions:
+            print(f"\n🔬 [DEBUG] Extracted mentions:")
+            for i, m in enumerate(license_mentions[:5]):  # First 5
+                print(f"   {i+1}. {m['license_name']} ({m['spdx_expression']}) "
+                      f"score={m['match_score']} from {m['source_file']}")
         
         # LLM analysis (if API key provided)
         results = {
@@ -599,6 +736,7 @@ def analyze_local_folder(
     folder_path: str,
     output_dir: Path,
     api_key: str = None,
+    debug: bool = False
 ):
     """Analyze licenses in a local folder."""
     
@@ -624,7 +762,8 @@ def analyze_local_folder(
     license_mentions = extract_license_context_json(
         str(scancode_output),
         str(folder.parent),
-        score_threshold=99.0
+        score_threshold=50.0,
+        debug=debug
     )
     print(f"✓ Extracted {len(license_mentions)} license mentions")
     
@@ -686,6 +825,7 @@ Examples:
   %(prog)s --link https://github.com/twbs/bootstrap
   %(prog)s --folder /path/to/my/project
   %(prog)s --link https://github.com/facebook/react --output ./results
+  %(prog)s --link https://github.com/mysql/mysql-server --debug --keep-temp
   
 Configuration:
   Create a .env file with:
@@ -717,6 +857,12 @@ Configuration:
         help="Keep temporary downloaded files (for debugging, only with --link)"
     )
     
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print debug information about ScanCode output and extraction"
+    )
+    
     args = parser.parse_args()
     
     # Get API key from .env
@@ -732,13 +878,15 @@ Configuration:
             repo_url=args.link,
             output_dir=Path(args.output),
             api_key=api_key,
-            keep_temp=args.keep_temp
+            keep_temp=args.keep_temp,
+            debug=args.debug
         )
     else:
         analyze_local_folder(
             folder_path=args.folder,
             output_dir=Path(args.output),
             api_key=api_key,
+            debug=args.debug
         )
 
 
