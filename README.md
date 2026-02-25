@@ -15,6 +15,72 @@ A modular tool that automatically detects and classifies open-source licenses in
 7. **Clean up** — Temporary files automatically deleted (use `--keep-temp` to preserve)
 
 ---
+## Pipeline Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER INPUT                               │
+│  python main.py --link https://github.com/owner/repo            │
+│         OR                                                       │
+│  python main.py --folder /path/to/local/project                 │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+        ┌────────────────────────────────────┐
+        │         main.py (orchestrator)      │
+        │  - Parses CLI arguments             │
+        │  - Loads environment variables      │
+        │  - Coordinates all modules          │
+        └────────────────┬───────────────────┘
+                         │
+        ┌────────────────┴───────────────────┐
+        │                                    │
+        ▼ (if --link)                        ▼ (if --folder)
+┌───────────────────┐              ┌────────────────────┐
+│ github_downloader │              │   Skip download     │
+│  - Parse URL      │              │   Use local files   │
+│  - Get API token  │              └─────────┬──────────┘
+│  - Download files │                        │
+└────────┬──────────┘                        │
+         │                                   │
+         └───────────────┬───────────────────┘
+                         │
+                         ▼
+         ┌───────────────────────────────┐
+         │      scancode_runner.py        │
+         │  - Run ScanCode toolkit        │
+         │  - Generate JSON output        │
+         └───────────┬───────────────────┘
+                     │
+                     ▼
+         ┌───────────────────────────────┐
+         │ license_context_extractor.py  │
+         │  - Parse ScanCode JSON         │
+         │  - Extract license mentions    │
+         │  - Get surrounding context     │
+         │  - Classify file roles         │
+         └───────────┬───────────────────┘
+                     │
+                     ▼
+         ┌───────────────────────────────┐
+         │      llm_analyzer.py           │
+         │  - Build prompt from mentions  │
+         │  - Call Mistral API            │
+         │  - Validate response           │
+         │  - Return license decision     │
+         └───────────┬───────────────────┘
+                     │
+                     ▼
+         ┌───────────────────────────────┐
+         │      main.py (save results)    │
+         │  - Create output directory     │
+         │  - Save JSON file              │
+         │  - Save text report            │
+         │  - Print summary               │
+         └───────────────────────────────┘
+```
+
+---
 
 ## 📁 Project Structure
 
