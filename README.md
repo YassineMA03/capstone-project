@@ -398,9 +398,9 @@ source venv/bin/activate
 
 Typical timings for standard repository:
 - **Download**: 2-5 seconds
-- **ScanCode**: 3-10 seconds
+- **ScanCode**: 10-100 seconds
 - **LLM Analysis**: 1-3 seconds
-- **Total**: ~6-18 seconds
+- **Total**: ~10-110 seconds
 
 Large repos (100+ files) may take longer for ScanCode analysis.
 
